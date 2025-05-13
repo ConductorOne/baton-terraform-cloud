@@ -6,10 +6,35 @@ import (
 )
 
 var (
+	TokenField = field.StringField(
+		"token",
+		field.WithDescription("The API token used to authenticate with terraform cloud."),
+		field.WithRequired(true),
+	)
+
+	// OrgID = field.StringField(
+	// 	"orgID",
+	// 	field.WithDescription("The organization ID used in terraform cloud."),
+	// 	field.WithRequired(true),
+	// )
+
+	Address = field.StringField(
+		"address",
+		field.WithDescription("The address of the terraform instance. Default: https://app.terraform.io"),
+		field.WithRequired(false),
+	)
 	// ConfigurationFields defines the external configuration required for the
 	// connector to run. Note: these fields can be marked as optional or
 	// required.
-	ConfigurationFields = []field.SchemaField{}
+	ConfigurationFields = []field.SchemaField{
+		TokenField,
+		Address,
+	}
+	// ConfigurationFields = []field.SchemaField{
+	// 	TokenField,
+	// 	OrgID,
+	// 	Address,
+	// }
 
 	// FieldRelationships defines relationships between the fields listed in
 	// ConfigurationFields that can be automatically validated. For example, a

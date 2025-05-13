@@ -7,14 +7,18 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-terraform-cloud/pkg/client"
 )
 
-type Connector struct{}
+type Connector struct {
+	client *client.Client
+}
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
 	return []connectorbuilder.ResourceSyncer{
-		newUserBuilder(),
+		newOrganizationBuilder(d.client),
+		newUserBuilder(d.client),
 	}
 }
 
@@ -39,6 +43,16 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context) (*Connector, error) {
-	return &Connector{}, nil
+func New(ctx context.Context, token, address string) (*Connector, error) {
+	client := client.New(token, address)
+	return &Connector{
+		client: client,
+	}, nil
 }
+
+// func New(ctx context.Context, token, OrgID, address string) (*Connector, error) {
+// 	client := client.New(address, token)
+// 	return &Connector{
+// 		client: client,
+// 	}, nil
+// }
