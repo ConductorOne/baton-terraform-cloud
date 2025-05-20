@@ -16,3 +16,27 @@ var organizationResourceType = &v2.ResourceType{
 	DisplayName: "Organization",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
 }
+
+var projectResourceType = &v2.ResourceType{
+	Id:          "project",
+	DisplayName: "Project",
+	Traits: []v2.ResourceType_Trait{
+		v2.ResourceType_TRAIT_GROUP,
+	},
+}
+
+var workspaceResourceType = &v2.ResourceType{
+	Id:          "workspace",
+	DisplayName: "Workspace",
+	Traits: []v2.ResourceType_Trait{
+		v2.ResourceType_TRAIT_GROUP,
+	},
+}
+
+// requires: team management requires paid plan
+// https://www.hashicorp.com/en/pricing?tab=terraform
+var teamResourceType = &v2.ResourceType{
+	Id:          "team",
+	DisplayName: "Team",
+	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+}

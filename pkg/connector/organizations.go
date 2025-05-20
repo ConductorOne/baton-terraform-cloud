@@ -4,29 +4,58 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
+	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
 	"github.com/hashicorp/go-tfe"
 )
 
+const orgMembership = "member"
+
 type organizationsBuilder struct {
-	client *client.Client
+	client         *client.Client
+	m              *sync.Mutex
+	orgPermissions map[string]*tfe.OrganizationPermissions
 }
 
 func (o *organizationsBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 	return organizationResourceType
 }
 
+// func (o *organizationsBuilder) cacheOrgPermissions(org *tfe.Organization) {
+// 	o.m.Lock()
+// 	defer o.m.Unlock()
+// 	o.orgPermissions[org.Name] = org.Permissions
+// }
+
+// func (o *organizationsBuilder) getOrganizationPermissions(ctx context.Context, orgName string) (*tfe.OrganizationPermissions, error) {
+// 	o.m.Lock()
+// 	defer o.m.Unlock()
+//
+// 	permissions, ok := o.orgPermissions[orgName]
+// 	if ok {
+// 		return permissions, nil
+// 	}
+//
+// 	org, err := o.client.Organizations.Read(ctx, orgName)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	return org.Permissions, nil
+// }
+
 func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"email":                 org.Email,
 		"costEstimationEnabled": org.CostEstimationEnabled,
 		"twoFactorConformant":   org.TwoFactorConformant,
-		"defaultProject":        org.DefaultProject.Name,
 	}
 	return resourceSdk.NewGroupResource(
 		org.Name,
@@ -37,6 +66,9 @@ func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 		},
 		resourceSdk.WithAnnotation(
 			&v2.ChildResourceType{ResourceTypeId: userResourceType.Id},
+			&v2.ChildResourceType{ResourceTypeId: teamResourceType.Id},
+			&v2.ChildResourceType{ResourceTypeId: projectResourceType.Id},
+			&v2.ChildResourceType{ResourceTypeId: workspaceResourceType.Id},
 		),
 	)
 }
@@ -82,12 +114,61 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 	return rv, nextPage, nil, nil
 }
 
-func (o *organizationsBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (o *organizationsBuilder) Entitlements(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+	return []*v2.Entitlement{
+		entitlement.NewAssignmentEntitlement(
+			resource,
+			teamMembership,
+			entitlement.WithGrantableTo(userResourceType),
+			entitlement.WithDescription(fmt.Sprintf("Member of %s team", resource.DisplayName)),
+			entitlement.WithDisplayName(fmt.Sprintf("Member of %s team", resource.DisplayName)),
+		),
+	}, "", nil, nil
 }
 
 func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+	var page int
+	var err error
+	if pToken.Token != "" {
+		page, err = strconv.Atoi(pToken.Token)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+		}
+	}
+
+	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organization-memberships
+	memberships, err := o.client.OrganizationMemberships.List(ctx, resource.Id.Resource, &tfe.OrganizationMembershipListOptions{
+		Include:     []tfe.OrgMembershipIncludeOpt{"user"},
+		ListOptions: client.ListOptions(page),
+	})
+
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
+	}
+
+	if len(memberships.Items) == 0 {
+		return nil, "", nil, nil
+	}
+
+	rv := []*v2.Grant{}
+	for _, membership := range memberships.Items {
+		principalID, err := resourceSdk.NewResourceID(userResourceType, membership.User.ID)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create user resource ID: %w", err)
+		}
+		rv = append(rv, grant.NewGrant(
+			resource,
+			orgMembership,
+			principalID,
+		))
+	}
+
+	var nextPage string
+	if memberships.CurrentPage < memberships.TotalPages {
+		nextPage = strconv.Itoa(page + 1)
+	}
+
+	return rv, nextPage, nil, nil
 }
 
 func newOrganizationBuilder(client *client.Client) *organizationsBuilder {

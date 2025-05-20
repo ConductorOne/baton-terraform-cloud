@@ -11,15 +11,14 @@ var (
 )
 
 type Client struct {
+	// https://app.terraform.io
+	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs
 	*tfe.Client
 }
 
 func New(token, address string) *Client {
-	if address == "" {
-		address = "https://app.terraform.io"
-	}
-
 	config := &tfe.Config{
+		// defaults to https://app.terraform.io
 		Address:           address,
 		Token:             token,
 		RetryServerErrors: true,

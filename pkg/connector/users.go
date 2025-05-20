@@ -23,13 +23,14 @@ func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 
 func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
-		"email": user.Email,
+		"email":             user.Email,
+		"twoFactorEnabled":  user.TwoFactor.Enabled,
+		"twoFactorVerified": user.TwoFactor.Verified,
 	}
 
 	if user.IsAdmin != nil {
 		profile["isAdmin"] = *user.IsAdmin
 	}
-
 	return resourceSdk.NewUserResource(
 		user.Username,
 		userResourceType,
@@ -57,7 +58,9 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		}
 	}
 
+	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organization-memberships
 	memberships, err := o.client.OrganizationMemberships.List(ctx, parentResourceID.Resource, &tfe.OrganizationMembershipListOptions{
+		Include:     []tfe.OrgMembershipIncludeOpt{"user"},
 		ListOptions: client.ListOptions(page),
 	})
 

@@ -22,6 +22,7 @@ var (
 		"address",
 		field.WithDescription("The address of the terraform instance. Default: https://app.terraform.io"),
 		field.WithRequired(false),
+		field.WithDefaultValue("https://app.terraform.io"),
 	)
 	// ConfigurationFields defines the external configuration required for the
 	// connector to run. Note: these fields can be marked as optional or
