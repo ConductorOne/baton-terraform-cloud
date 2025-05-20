@@ -100,13 +100,6 @@ func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, 
 			entitlement.WithDisplayName(fmt.Sprintf("Project access level %s", permission)),
 		))
 	}
-	// rv = append(rv, entitlement.NewAssignmentEntitlement(
-	// 	resource,
-	// 	projectMembership,
-	// 	entitlement.WithGrantableTo(teamResourceType),
-	// 	entitlement.WithDescription(fmt.Sprintf("Member of %s project", resource.DisplayName)),
-	// 	entitlement.WithDisplayName(fmt.Sprintf("Member of %s project", resource.DisplayName)),
-	// ))
 	return rv, "", nil, nil
 }
 

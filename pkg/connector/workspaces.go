@@ -159,7 +159,6 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, pT
 	grantOptions := []grant.GrantOption{
 		grant.WithAnnotation(&v2.GrantExpandable{
 			EntitlementIds: entitlementIds,
-			// Shallow:        true,
 		}),
 	}
 
