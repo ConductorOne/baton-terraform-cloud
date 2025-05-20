@@ -7,6 +7,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
@@ -31,12 +32,19 @@ func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, err
 	if user.IsAdmin != nil {
 		profile["isAdmin"] = *user.IsAdmin
 	}
+
+	name := user.Username
+	if user.Username == "" {
+		name = user.Email + "+invited"
+	}
+
 	return resourceSdk.NewUserResource(
-		user.Username,
+		name,
 		userResourceType,
 		user.ID,
 		[]resourceSdk.UserTraitOption{
 			resourceSdk.WithUserProfile(profile),
+			// last login data not available in terraform api as of 20/05/2025
 		},
 		resourceSdk.WithParentResourceID(parentID),
 	)
@@ -87,6 +95,61 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	}
 
 	return rv, nextPage, nil, nil
+}
+
+func (o *userBuilder) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
+	return &v2.CredentialDetailsAccountProvisioning{
+		SupportedCredentialOptions: []v2.CapabilityDetailCredentialOption{
+			v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_NO_PASSWORD,
+		},
+		PreferredCredentialOption: v2.CapabilityDetailCredentialOption_CAPABILITY_DETAIL_CREDENTIAL_OPTION_NO_PASSWORD,
+	}, nil, nil
+}
+
+func (o *userBuilder) CreateAccount(ctx context.Context, accountInfo *v2.AccountInfo, credentialOptions *v2.CredentialOptions) (
+	connectorbuilder.CreateAccountResponse,
+	[]*v2.PlaintextData,
+	annotations.Annotations,
+	error,
+) {
+
+	pMap := accountInfo.Profile.AsMap()
+	email, ok := pMap["email"].(string)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("baton-terraform-cloud: email not found in profile")
+	}
+	orgName, ok := pMap["organizationName"].(string)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("baton-terraform-cloud: organizationName not found in profile")
+	}
+	teamNames, ok := pMap["teamNames"].([]string)
+	if !ok {
+		teamNames = []string{"owners"}
+	}
+
+	teams, err := o.client.Teams.List(ctx, orgName, &tfe.TeamListOptions{
+		Names: teamNames,
+	})
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list teams: %w", err)
+	}
+
+	if len(teams.Items) == 0 {
+		return nil, nil, nil, fmt.Errorf("baton-terraform-cloud: no teams found for the given names")
+	}
+
+	orgMembership, err := o.client.OrganizationMemberships.Create(ctx, orgName, tfe.OrganizationMembershipCreateOptions{
+		Email: &email,
+		Teams: teams.Items,
+	})
+
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create user: %w", err)
+	}
+
+	return &v2.CreateAccountResponse_ActionRequiredResult{
+		Message: string(orgMembership.Status),
+	}, nil, nil, nil
 }
 
 // Entitlements always returns an empty slice for users.

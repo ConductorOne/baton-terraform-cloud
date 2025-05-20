@@ -34,23 +34,6 @@ func (o *organizationsBuilder) ResourceType(ctx context.Context) *v2.ResourceTyp
 // 	o.orgPermissions[org.Name] = org.Permissions
 // }
 
-// func (o *organizationsBuilder) getOrganizationPermissions(ctx context.Context, orgName string) (*tfe.OrganizationPermissions, error) {
-// 	o.m.Lock()
-// 	defer o.m.Unlock()
-//
-// 	permissions, ok := o.orgPermissions[orgName]
-// 	if ok {
-// 		return permissions, nil
-// 	}
-//
-// 	org, err := o.client.Organizations.Read(ctx, orgName)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	return org.Permissions, nil
-// }
-
 func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"email":                 org.Email,
@@ -170,6 +153,44 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 	}
 
 	return rv, nextPage, nil, nil
+}
+
+func (o *organizationsBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	return nil, nil
+}
+
+func (o *organizationsBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	entitlement := grant.Entitlement
+	orgName := entitlement.Resource.Id.Resource
+
+	userTrait, err := resourceSdk.GetUserTrait(grant.Principal)
+	if err != nil {
+		return nil, fmt.Errorf("baton-terraform-cloud: failed to get user trait: %w", err)
+	}
+
+	profile := userTrait.GetProfile().AsMap()
+	email, ok := profile["email"].(string)
+	if !ok {
+		return nil, fmt.Errorf("baton-terraform-cloud: failed to get email from user trait")
+	}
+
+	orgMemberships, err := o.client.OrganizationMemberships.List(ctx, orgName, &tfe.OrganizationMembershipListOptions{
+		Emails: []string{email},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("baton-terraform-cloud: failed to list organization memberships: %w", err)
+	}
+
+	if len(orgMemberships.Items) == 0 {
+		return annotations.New(&v2.GrantAlreadyRevoked{}), fmt.Errorf("baton-terraform-cloud: no organization memberships found for user %s in organization %s", email, orgName)
+	}
+
+	orgMembershipId := orgMemberships.Items[0].ID
+	err = o.client.OrganizationMemberships.Delete(ctx, orgMembershipId)
+	if err != nil {
+		return nil, fmt.Errorf("baton-terraform-cloud: failed to remove user from organization: %w", err)
+	}
+	return nil, nil
 }
 
 func newOrganizationBuilder(client *client.Client) *organizationsBuilder {
