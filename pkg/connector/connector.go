@@ -22,6 +22,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 		newProjectBuilder(d.client),
 		newWorkspaceBuilder(d.client),
 		newTeamBuilder(d.client),
+		newAgentTokenBuilder(d.client),
 	}
 }
 

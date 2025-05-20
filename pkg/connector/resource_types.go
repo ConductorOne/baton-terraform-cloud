@@ -2,6 +2,7 @@ package connector
 
 import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
+	"github.com/conductorone/baton-sdk/pkg/annotations"
 )
 
 // The user resource type is for all user objects from the database.
@@ -31,6 +32,15 @@ var workspaceResourceType = &v2.ResourceType{
 	Traits: []v2.ResourceType_Trait{
 		v2.ResourceType_TRAIT_GROUP,
 	},
+}
+
+var agentTokenResourceType = &v2.ResourceType{
+	Id:          "agentToken",
+	DisplayName: "Agent Token",
+	Traits: []v2.ResourceType_Trait{
+		v2.ResourceType_TRAIT_SECRET,
+	},
+	Annotations: annotations.New(&v2.SkipEntitlementsAndGrants{}),
 }
 
 // requires: team management requires paid plan

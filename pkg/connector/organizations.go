@@ -69,6 +69,7 @@ func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 			&v2.ChildResourceType{ResourceTypeId: teamResourceType.Id},
 			&v2.ChildResourceType{ResourceTypeId: projectResourceType.Id},
 			&v2.ChildResourceType{ResourceTypeId: workspaceResourceType.Id},
+			&v2.ChildResourceType{ResourceTypeId: agentTokenResourceType.Id},
 		),
 	)
 }
