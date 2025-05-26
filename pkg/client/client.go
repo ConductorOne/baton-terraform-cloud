@@ -1,8 +1,6 @@
 package client
 
 import (
-	"log"
-
 	"github.com/hashicorp/go-tfe"
 )
 
@@ -16,7 +14,7 @@ type Client struct {
 	*tfe.Client
 }
 
-func New(token, address string) *Client {
+func New(token, address string) (*Client, error) {
 	config := &tfe.Config{
 		// defaults to https://app.terraform.io
 		Address:           address,
@@ -26,11 +24,11 @@ func New(token, address string) *Client {
 
 	client, err := tfe.NewClient(config)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	return &Client{
 		Client: client,
-	}
+	}, nil
 }
 
 func ListOptions(pageNumber int) tfe.ListOptions {

@@ -151,14 +151,14 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, pT
 		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create project resource: %w", err)
 	}
 
-	entitlementIds := []string{}
+	entitlementIDs := []string{}
 	for _, p := range permissions {
-		entitlementIds = append(entitlementIds, entitlement.NewEntitlementID(pr, p))
+		entitlementIDs = append(entitlementIDs, entitlement.NewEntitlementID(pr, p))
 	}
 
 	grantOptions := []grant.GrantOption{
 		grant.WithAnnotation(&v2.GrantExpandable{
-			EntitlementIds: entitlementIds,
+			EntitlementIds: entitlementIDs,
 		}),
 	}
 

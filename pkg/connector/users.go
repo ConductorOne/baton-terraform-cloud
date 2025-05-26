@@ -112,7 +112,6 @@ func (o *userBuilder) CreateAccount(ctx context.Context, accountInfo *v2.Account
 	annotations.Annotations,
 	error,
 ) {
-
 	pMap := accountInfo.Profile.AsMap()
 	email, ok := pMap["email"].(string)
 	if !ok {

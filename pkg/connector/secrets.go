@@ -76,7 +76,6 @@ func (o *agentTokenBuilder) List(ctx context.Context, parentResourceID *v2.Resou
 
 			rv = append(rv, resource)
 		}
-
 	}
 
 	var nextPage string

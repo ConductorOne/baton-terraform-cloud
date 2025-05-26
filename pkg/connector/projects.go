@@ -19,8 +19,6 @@ type projectBuilder struct {
 	client *client.Client
 }
 
-const projectMembership = "member"
-
 var permissions = []string{"read", "write", "maintain", "admin", "custom"}
 
 func (o *projectBuilder) ResourceType(ctx context.Context) *v2.ResourceType {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -19,20 +18,12 @@ import (
 const orgMembership = "member"
 
 type organizationsBuilder struct {
-	client         *client.Client
-	m              *sync.Mutex
-	orgPermissions map[string]*tfe.OrganizationPermissions
+	client *client.Client
 }
 
 func (o *organizationsBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 	return organizationResourceType
 }
-
-// func (o *organizationsBuilder) cacheOrgPermissions(org *tfe.Organization) {
-// 	o.m.Lock()
-// 	defer o.m.Unlock()
-// 	o.orgPermissions[org.Name] = org.Permissions
-// }
 
 func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 	profile := map[string]interface{}{
