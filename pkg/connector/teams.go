@@ -92,14 +92,15 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		},
 	})
 
-	o.cacheTeamMembers(teams)
-
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list teams: %w", err)
 	}
+
 	if len(teams.Items) == 0 {
 		return nil, "", nil, nil
 	}
+
+	o.cacheTeamMembers(teams)
 
 	rv := []*v2.Resource{}
 	for _, team := range teams.Items {
