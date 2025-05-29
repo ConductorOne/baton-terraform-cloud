@@ -173,7 +173,7 @@ func (o *organizationsBuilder) Revoke(ctx context.Context, grant *v2.Grant) (ann
 	}
 
 	if len(orgMemberships.Items) == 0 {
-		return annotations.New(&v2.GrantAlreadyRevoked{}), fmt.Errorf("baton-terraform-cloud: no organization memberships found for user %s in organization %s", email, orgName)
+		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
 	}
 
 	orgMembershipId := orgMemberships.Items[0].ID
