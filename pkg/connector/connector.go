@@ -90,10 +90,3 @@ func New(ctx context.Context, token, address string) (*Connector, error) {
 		client: client,
 	}, nil
 }
-
-// func New(ctx context.Context, token, OrgID, address string) (*Connector, error) {
-// 	client := client.New(address, token)
-// 	return &Connector{
-// 		client: client,
-// 	}, nil
-// }
