@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.2
 
 require (
-	github.com/conductorone/baton-sdk v0.3.10
+	github.com/conductorone/baton-sdk v0.3.35
 	github.com/ennyjfrick/ruleguard-logfatal v0.0.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/hashicorp/go-tfe v1.79.0
@@ -116,6 +116,7 @@ require (
 	golang.org/x/oauth2 v0.30.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/term v0.32.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250512202823-5a2f75b736a9 // indirect
