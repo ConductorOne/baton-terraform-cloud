@@ -9,12 +9,12 @@ jobs:
   go-lint:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.22.x
-      - name: Checkout code
-        uses: actions/checkout@v4
+          go-version-file: go.mod
       - name: Run linters
         uses: golangci/golangci-lint-action@v8
         with:
@@ -23,47 +23,19 @@ jobs:
 
   test-teams:
     runs-on: ubuntu-latest
-    env:
-      CONNECTOR_GRANT: 'team:team-CYFFnmh6HJ4ySPfJ:member:user:user-DU4i2UFv6Vh7AxUp'
-      CONNECTOR_ENTITLEMENT: 'team:team-CYFFnmh6HJ4ySPfJ:member'
-      CONNECTOR_PRINCIPAL: 'user-DU4i2UFv6Vh7AxUp'
-      CONNECTOR_PRINCIPAL_TYPE: 'user'
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24.x
-      - name: Checkout code
-        uses: actions/checkout@v4
+          go-version-file: go.mod
       - name: Build baton-terraform-cloud
         run: go build ./cmd/baton-terraform-cloud
-      - name: Run baton-terraform-cloud
-        run: ./baton-terraform-cloud
-      - name: Install baton
-        run: ./scripts/get-baton.sh && mv baton /usr/local/bin
-
-      - name: Check for grant before revoking
-        run: |
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | \
-          jq --exit-status ".grants[].principal.id.resource == \"${{ env.CONNECTOR_PRINCIPAL }}\""
-
-      - name: Revoke grants
-        run: ./baton-terraform-cloud --revoke-grant="${{ env.CONNECTOR_GRANT }}"
-
-      - name: Check grant was revoked
-        run: |
-          ./baton-terraform-cloud && \
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | \
-          jq --exit-status "if .grants then .grants[]?.principal.id.resource != \"${{ env.CONNECTOR_PRINCIPAL }}\" else . end"
-
-      - name: Grant entitlement
-        run: |
-          ./baton-terraform-cloud --grant-entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" \
-                          --grant-principal="${{ env.CONNECTOR_PRINCIPAL }}" \
-                          --grant-principal-type="${{ env.CONNECTOR_PRINCIPAL_TYPE }}"
-
-      - name: Check grant was re-granted
-        run: |
-          ./baton-terraform-cloud && \
-          baton grants --entitlement="${{ env.CONNECTOR_ENTITLEMENT }}" --output-format=json | \
-          jq --exit-status ".grants[].principal.id.resource == \"${{ env.CONNECTOR_PRINCIPAL }}\""
+      - name: Grant/revoke
+        uses: ConductorOne/github-workflows/actions/sync-test@v2
+        with:
+          connector: ./baton-terraform-cloud
+          baton-entitlement: "team:team-CYFFnmh6HJ4ySPfJ:member"
+          baton-principal: "user-DU4i2UFv6Vh7AxUp"
+          baton-principal-type: user
