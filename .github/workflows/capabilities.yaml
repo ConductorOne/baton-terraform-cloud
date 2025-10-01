@@ -24,7 +24,7 @@ jobs:
         run: go build -o connector ./cmd/baton-terraform-cloud
 
       - name: Run and save output
-        run: ./connector capabilities --token "${{ secrets.BATON_TOKEN }}" > baton_capabilities.json
+        run: ./connector capabilities --token "test123" > baton_capabilities.json
 
       - name: Commit changes
         uses: EndBug/add-and-commit@v9
