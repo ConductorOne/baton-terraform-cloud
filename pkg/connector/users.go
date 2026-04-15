@@ -38,14 +38,19 @@ func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, err
 		name = user.Email + "+invited"
 	}
 
+	userTraitOptions := []resourceSdk.UserTraitOption{
+		resourceSdk.WithUserProfile(profile),
+		// last login data not available in terraform api as of 20/05/2025
+	}
+	if user.Email != "" {
+		userTraitOptions = append(userTraitOptions, resourceSdk.WithEmail(user.Email, true))
+	}
+
 	return resourceSdk.NewUserResource(
 		name,
 		userResourceType,
 		user.ID,
-		[]resourceSdk.UserTraitOption{
-			resourceSdk.WithUserProfile(profile),
-			// last login data not available in terraform api as of 20/05/2025
-		},
+		userTraitOptions,
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }
