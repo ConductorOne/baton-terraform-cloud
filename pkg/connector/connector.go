@@ -39,7 +39,7 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 		Description: "Baton connector for HCP Terraform (formerly Terraform Cloud).",
 		AccountCreationSchema: &v2.ConnectorAccountCreationSchema{
 			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
-				"email": {
+				emailProfileKey: {
 					DisplayName: "Email",
 					Required:    true,
 					Description: "The email address of the user.",

@@ -5,9 +5,14 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 )
 
+const (
+	userResourceTypeID = "user"
+	emailProfileKey    = "email"
+)
+
 // The user resource type is for all user objects from the database.
 var userResourceType = &v2.ResourceType{
-	Id:          "user",
+	Id:          userResourceTypeID,
 	DisplayName: "User",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
 }

@@ -27,7 +27,7 @@ func (o *organizationsBuilder) ResourceType(ctx context.Context) *v2.ResourceTyp
 
 func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 	profile := map[string]interface{}{
-		"email":                 org.Email,
+		emailProfileKey:         org.Email,
 		"costEstimationEnabled": org.CostEstimationEnabled,
 		"twoFactorConformant":   org.TwoFactorConformant,
 	}
@@ -113,7 +113,7 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 
 	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organization-memberships
 	memberships, err := o.client.OrganizationMemberships.List(ctx, resource.Id.Resource, &tfe.OrganizationMembershipListOptions{
-		Include:     []tfe.OrgMembershipIncludeOpt{"user"},
+		Include:     []tfe.OrgMembershipIncludeOpt{userResourceTypeID},
 		ListOptions: client.ListOptions(page),
 	})
 
