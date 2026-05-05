@@ -24,7 +24,7 @@ func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 
 func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
-		"email":             user.Email,
+		emailProfileKey:    user.Email,
 		"twoFactorEnabled":  user.TwoFactor.Enabled,
 		"twoFactorVerified": user.TwoFactor.Verified,
 	}
@@ -38,14 +38,19 @@ func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, err
 		name = user.Email + "+invited"
 	}
 
+	userTraitOptions := []resourceSdk.UserTraitOption{
+		resourceSdk.WithUserProfile(profile),
+		// last login data not available in terraform api as of 20/05/2025
+	}
+	if user.Email != "" {
+		userTraitOptions = append(userTraitOptions, resourceSdk.WithEmail(user.Email, true))
+	}
+
 	return resourceSdk.NewUserResource(
 		name,
 		userResourceType,
 		user.ID,
-		[]resourceSdk.UserTraitOption{
-			resourceSdk.WithUserProfile(profile),
-			// last login data not available in terraform api as of 20/05/2025
-		},
+		userTraitOptions,
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }
@@ -68,7 +73,7 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organization-memberships
 	memberships, err := o.client.OrganizationMemberships.List(ctx, parentResourceID.Resource, &tfe.OrganizationMembershipListOptions{
-		Include:     []tfe.OrgMembershipIncludeOpt{"user"},
+		Include:     []tfe.OrgMembershipIncludeOpt{userResourceTypeID},
 		ListOptions: client.ListOptions(page),
 	})
 

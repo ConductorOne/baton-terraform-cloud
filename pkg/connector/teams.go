@@ -158,11 +158,33 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 	return rv, "", nil, nil
 }
 
+func (o *teamBuilder) isTeamMember(ctx context.Context, teamID, userID string) (bool, error) {
+	members, err := o.client.TeamMembers.List(ctx, teamID)
+	if err != nil {
+		return false, fmt.Errorf("baton-terraform-cloud: failed to list team members: %w", err)
+	}
+	for _, m := range members {
+		if m.ID == userID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (o *teamBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
 	teamID := entitlement.Resource.Id.Resource
+	username := principal.DisplayName
 
-	err := o.client.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
-		Usernames: []string{principal.DisplayName},
+	isMember, err := o.isTeamMember(ctx, teamID, principal.Id.Resource)
+	if err != nil {
+		return nil, err
+	}
+	if isMember {
+		return annotations.New(&v2.GrantAlreadyExists{}), nil
+	}
+
+	err = o.client.TeamMembers.Add(ctx, teamID, tfe.TeamMemberAddOptions{
+		Usernames: []string{username},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("baton-terraform-cloud: failed to add user to team: %w", err)
@@ -174,9 +196,18 @@ func (o *teamBuilder) Grant(ctx context.Context, principal *v2.Resource, entitle
 func (o *teamBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
 	entitlement := grant.Entitlement
 	teamID := entitlement.Resource.Id.Resource
+	username := grant.Principal.DisplayName
 
-	err := o.client.TeamMembers.Remove(ctx, teamID, tfe.TeamMemberRemoveOptions{
-		Usernames: []string{grant.Principal.DisplayName},
+	isMember, err := o.isTeamMember(ctx, teamID, grant.Principal.Id.Resource)
+	if err != nil {
+		return nil, err
+	}
+	if !isMember {
+		return annotations.New(&v2.GrantAlreadyRevoked{}), nil
+	}
+
+	err = o.client.TeamMembers.Remove(ctx, teamID, tfe.TeamMemberRemoveOptions{
+		Usernames: []string{username},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("baton-terraform-cloud: failed to remove user from team: %w", err)

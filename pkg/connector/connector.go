@@ -35,11 +35,11 @@ func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.R
 // Metadata returns metadata about the connector.
 func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
-		DisplayName: "My Baton Connector",
-		Description: "The template implementation of a baton connector.",
+		DisplayName: "HCP Terraform",
+		Description: "Baton connector for HCP Terraform (formerly Terraform Cloud).",
 		AccountCreationSchema: &v2.ConnectorAccountCreationSchema{
 			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
-				"email": {
+				emailProfileKey: {
 					DisplayName: "Email",
 					Required:    true,
 					Description: "The email address of the user.",
