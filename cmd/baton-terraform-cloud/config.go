@@ -9,6 +9,7 @@ var (
 	TokenField = field.StringField(
 		"token",
 		field.WithDescription("The API token used to authenticate with terraform cloud."),
+		field.WithIsSecret(true),
 		field.WithRequired(true),
 	)
 
