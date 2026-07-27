@@ -149,15 +149,49 @@ func (o *organizationsBuilder) Grant(ctx context.Context, principal *v2.Resource
 	return nil, nil
 }
 
+// principalEmail resolves the email address the organization membership API needs
+// to identify a principal.
+//
+// It reads the user trait's primary email first. baton-sdk v0.20.1 deprecated the
+// profile on the user trait in favour of a resource-level profile, but left the
+// trait's emails alone, so this is both the non-deprecated and the semantically
+// correct field — and it does not depend on the platform hydrating the newer
+// resource-level profile onto the principal it sends us. The resource-level
+// profile is the fallback.
+func principalEmail(principal *v2.Resource) (string, error) {
+	if userTrait, err := resourceSdk.GetUserTrait(principal); err == nil {
+		var firstAddress string
+		for _, email := range userTrait.GetEmails() {
+			address := email.GetAddress()
+			if address == "" {
+				continue
+			}
+			if email.GetIsPrimary() {
+				return address, nil
+			}
+			if firstAddress == "" {
+				firstAddress = address
+			}
+		}
+		if firstAddress != "" {
+			return firstAddress, nil
+		}
+	}
+
+	if address, ok := principal.GetProfile().AsMap()[emailProfileKey].(string); ok && address != "" {
+		return address, nil
+	}
+
+	return "", fmt.Errorf("baton-terraform-cloud: failed to resolve email for principal %s", principal.GetId().GetResource())
+}
+
 func (o *organizationsBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
 	entitlement := grant.Entitlement
 	orgName := entitlement.Resource.Id.Resource
 
-	// profile lives on the resource rather than the user trait as of baton-sdk v0.20.1
-	profile := grant.Principal.GetProfile().AsMap()
-	email, ok := profile[emailProfileKey].(string)
-	if !ok {
-		return nil, fmt.Errorf("baton-terraform-cloud: failed to get email from principal profile")
+	email, err := principalEmail(grant.Principal)
+	if err != nil {
+		return nil, err
 	}
 
 	orgMemberships, err := o.client.OrganizationMemberships.List(ctx, orgName, &tfe.OrganizationMembershipListOptions{
