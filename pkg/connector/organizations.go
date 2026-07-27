@@ -35,9 +35,8 @@ func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 		org.Name,
 		organizationResourceType,
 		org.Name, // yes the name is the id: https://developer.hashicorp.com/terraform/cloud-docs/api-docs/organizations#show-an-organization
-		[]resourceSdk.GroupTraitOption{
-			resourceSdk.WithGroupProfile(profile),
-		},
+		nil,
+		resourceSdk.WithResourceProfile(profile),
 		resourceSdk.WithAnnotation(
 			&v2.ChildResourceType{ResourceTypeId: userResourceType.Id},
 			&v2.ChildResourceType{ResourceTypeId: teamResourceType.Id},
@@ -154,15 +153,11 @@ func (o *organizationsBuilder) Revoke(ctx context.Context, grant *v2.Grant) (ann
 	entitlement := grant.Entitlement
 	orgName := entitlement.Resource.Id.Resource
 
-	userTrait, err := resourceSdk.GetUserTrait(grant.Principal)
-	if err != nil {
-		return nil, fmt.Errorf("baton-terraform-cloud: failed to get user trait: %w", err)
-	}
-
-	profile := userTrait.GetProfile().AsMap()
-	email, ok := profile["email"].(string)
+	// profile lives on the resource rather than the user trait as of baton-sdk v0.20.1
+	profile := grant.Principal.GetProfile().AsMap()
+	email, ok := profile[emailProfileKey].(string)
 	if !ok {
-		return nil, fmt.Errorf("baton-terraform-cloud: failed to get email from user trait")
+		return nil, fmt.Errorf("baton-terraform-cloud: failed to get email from principal profile")
 	}
 
 	orgMemberships, err := o.client.OrganizationMemberships.List(ctx, orgName, &tfe.OrganizationMembershipListOptions{

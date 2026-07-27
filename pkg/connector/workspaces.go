@@ -75,9 +75,8 @@ func newWorkspaceResource(workspace *tfe.Workspace, parentID *v2.ResourceId) (*v
 		workspace.Name,
 		workspaceResourceType,
 		workspace.ID,
-		[]resourceSdk.GroupTraitOption{
-			resourceSdk.WithGroupProfile(profile),
-		},
+		nil,
+		resourceSdk.WithResourceProfile(profile),
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }

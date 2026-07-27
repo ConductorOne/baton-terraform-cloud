@@ -35,9 +35,8 @@ func newProjectResource(project *tfe.Project, parentID *v2.ResourceId) (*v2.Reso
 		project.Name,
 		projectResourceType,
 		project.ID,
-		[]resourceSdk.GroupTraitOption{
-			resourceSdk.WithGroupProfile(profile),
-		},
+		nil,
+		resourceSdk.WithResourceProfile(profile),
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }
