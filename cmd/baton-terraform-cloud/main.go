@@ -7,6 +7,7 @@ import (
 
 	"github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/connectorrunner"
 	"github.com/conductorone/baton-sdk/pkg/field"
 	"github.com/conductorone/baton-sdk/pkg/types"
 	"github.com/conductorone/baton-terraform-cloud/pkg/connector"
@@ -27,6 +28,7 @@ func main() {
 		field.Configuration{
 			Fields: ConfigurationFields,
 		},
+		connectorrunner.WithDefaultCapabilitiesConnectorBuilder(&connector.Connector{}),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())

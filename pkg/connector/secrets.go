@@ -27,9 +27,9 @@ func newAgentTokenResource(agentToken *tfe.AgentToken, parentID *v2.ResourceId) 
 		agentTokenResourceType,
 		agentToken.ID,
 		[]resourceSdk.SecretTraitOption{
-			resourceSdk.WithSecretCreatedAt(agentToken.CreatedAt),
 			resourceSdk.WithSecretLastUsedAt(agentToken.LastUsedAt),
 		},
+		resourceSdk.WithResourceCreatedAt(agentToken.CreatedAt),
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }

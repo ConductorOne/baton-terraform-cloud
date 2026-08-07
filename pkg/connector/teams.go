@@ -64,9 +64,8 @@ func newTeamResource(team *tfe.Team, parentID *v2.ResourceId) (*v2.Resource, err
 		team.Name,
 		teamResourceType,
 		team.ID,
-		[]resourceSdk.GroupTraitOption{
-			resourceSdk.WithGroupProfile(profile),
-		},
+		nil,
+		resourceSdk.WithResourceProfile(profile),
 		resourceSdk.WithParentResourceID(parentID),
 	)
 }
