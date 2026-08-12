@@ -31,9 +31,6 @@ type teamBuilder struct {
 }
 
 // teamMembersKey returns the session store key for the cached member list of a team.
-// Caching goes through the session store (rather than an in-process map) because a
-// container/Lambda deployment may run List and Grants for the same sync in separate
-// invocations that don't share memory.
 func teamMembersKey(teamID string) string {
 	return fmt.Sprintf("%s/%s", teamMembersKeyBase, teamID)
 }
@@ -105,7 +102,7 @@ func newTeamResource(team *tfe.Team, parentID *v2.ResourceId) (*v2.Resource, err
 
 func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	var page int
@@ -128,10 +125,6 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list teams: %w", err)
 	}
 
-	if len(teams.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
-	}
-
 	o.cacheTeamMembers(ctx, opts, teams)
 
 	rv := []*v2.Resource{}
@@ -152,15 +145,19 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 }
 
 func (o *teamBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+func (o *teamBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
-			resource,
+			nil,
 			teamMembership,
 			entitlement.WithGrantableTo(userResourceType),
-			entitlement.WithDescription(fmt.Sprintf("Member of %s team", resource.DisplayName)),
-			entitlement.WithDisplayName(fmt.Sprintf("Member of %s team", resource.DisplayName)),
+			entitlement.WithDescription("Member of team"),
+			entitlement.WithDisplayName("Member of team"),
 		),
-	}, &resourceSdk.SyncOpResults{}, nil
+	}, nil, nil
 }
 
 func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
@@ -187,7 +184,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts re
 		))
 	}
 
-	return rv, &resourceSdk.SyncOpResults{}, nil
+	return rv, nil, nil
 }
 
 func (o *teamBuilder) isTeamMember(ctx context.Context, teamID, userID string) (bool, error) {

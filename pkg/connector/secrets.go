@@ -39,7 +39,7 @@ func newAgentTokenResource(agentToken *tfe.AgentToken, parentID *v2.ResourceId) 
 // AgentTokens include a AgentTokenTrait because they are the 'shape' of a standard agentToken.
 func (o *agentTokenBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	var page int
@@ -57,10 +57,6 @@ func (o *agentTokenBuilder) List(ctx context.Context, parentResourceID *v2.Resou
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list agent pools: %w", err)
-	}
-
-	if len(agentPools.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := []*v2.Resource{}
@@ -89,12 +85,12 @@ func (o *agentTokenBuilder) List(ctx context.Context, parentResourceID *v2.Resou
 
 // Entitlements always returns an empty slice for secrets.
 func (o *agentTokenBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
-	return nil, &resourceSdk.SyncOpResults{}, nil
+	return nil, nil, nil
 }
 
 // Grants always returns an empty slice for secrets since they don't have any entitlements.
 func (o *agentTokenBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	return nil, &resourceSdk.SyncOpResults{}, nil
+	return nil, nil, nil
 }
 
 func newAgentTokenBuilder(client *client.Client) *agentTokenBuilder {

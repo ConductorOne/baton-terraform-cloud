@@ -69,10 +69,6 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list organizations: %w", err)
 	}
 
-	if len(orgs.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
-	}
-
 	rv := make([]*v2.Resource, 0, len(orgs.Items))
 	for _, org := range orgs.Items {
 		resource, err := newOrganizationResource(org)
@@ -91,15 +87,19 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 }
 
 func (o *organizationsBuilder) Entitlements(ctx context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+func (o *organizationsBuilder) StaticEntitlements(ctx context.Context, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
-			resource,
+			nil,
 			teamMembership,
 			entitlement.WithGrantableTo(userResourceType),
-			entitlement.WithDescription(fmt.Sprintf("Member of %s team", resource.DisplayName)),
-			entitlement.WithDisplayName(fmt.Sprintf("Member of %s team", resource.DisplayName)),
+			entitlement.WithDescription("Member of organization team"),
+			entitlement.WithDisplayName("Member of organization team"),
 		),
-	}, &resourceSdk.SyncOpResults{}, nil
+	}, nil, nil
 }
 
 func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
@@ -120,10 +120,6 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
-	}
-
-	if len(memberships.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := []*v2.Grant{}

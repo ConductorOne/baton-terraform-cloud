@@ -136,7 +136,7 @@ func newWorkspaceResource(workspace *tfe.Workspace, parentID *v2.ResourceId) (*v
 
 func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	var page int
@@ -158,7 +158,7 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 	}
 
 	if len(workspaces.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	// Cache the projects for the workspaces
@@ -182,15 +182,19 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 }
 
 func (o *workspaceBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+func (o *workspaceBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
-			resource,
+			nil,
 			teamMembership,
 			entitlement.WithGrantableTo(userResourceType),
-			entitlement.WithDescription(fmt.Sprintf("Member of %s workspace", resource.DisplayName)),
-			entitlement.WithDisplayName(fmt.Sprintf("Member of %s workspace", resource.DisplayName)),
+			entitlement.WithDescription("Member of workspace"),
+			entitlement.WithDisplayName("Member of workspace"),
 		),
-	}, &resourceSdk.SyncOpResults{}, nil
+	}, nil, nil
 }
 
 func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {

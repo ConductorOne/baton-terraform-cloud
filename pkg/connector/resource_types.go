@@ -21,6 +21,7 @@ var organizationResourceType = &v2.ResourceType{
 	Id:          "organization",
 	DisplayName: "Organization",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+	Annotations: annotations.New(&v2.SkipEntitlements{}),
 }
 
 var projectResourceType = &v2.ResourceType{
@@ -29,6 +30,7 @@ var projectResourceType = &v2.ResourceType{
 	Traits: []v2.ResourceType_Trait{
 		v2.ResourceType_TRAIT_GROUP,
 	},
+	Annotations: annotations.New(&v2.SkipEntitlements{}),
 }
 
 var workspaceResourceType = &v2.ResourceType{
@@ -37,6 +39,7 @@ var workspaceResourceType = &v2.ResourceType{
 	Traits: []v2.ResourceType_Trait{
 		v2.ResourceType_TRAIT_GROUP,
 	},
+	Annotations: annotations.New(&v2.SkipEntitlements{}),
 }
 
 var agentTokenResourceType = &v2.ResourceType{
@@ -54,4 +57,5 @@ var teamResourceType = &v2.ResourceType{
 	Id:          "team",
 	DisplayName: "Team",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+	Annotations: annotations.New(&v2.SkipEntitlements{}),
 }

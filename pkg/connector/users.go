@@ -59,7 +59,7 @@ func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, err
 // Users include a UserTrait because they are the 'shape' of a standard user.
 func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	var page int
@@ -79,10 +79,6 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
-	}
-
-	if len(memberships.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := []*v2.Resource{}
@@ -158,12 +154,12 @@ func (o *userBuilder) CreateAccount(ctx context.Context, accountInfo *v2.Account
 
 // Entitlements always returns an empty slice for users.
 func (o *userBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
-	return nil, &resourceSdk.SyncOpResults{}, nil
+	return nil, nil, nil
 }
 
 // Grants always returns an empty slice for users since they don't have any entitlements.
 func (o *userBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	return nil, &resourceSdk.SyncOpResults{}, nil
+	return nil, nil, nil
 }
 
 func newUserBuilder(client *client.Client) *userBuilder {

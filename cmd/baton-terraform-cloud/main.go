@@ -14,9 +14,6 @@ import (
 
 const connectorName = "baton-terraform-cloud"
 
-// version is patched at release time via GoReleaser's -X main.version={{.Version}}
-// ldflag, which requires a package-level var — a const would be inlined by the
-// compiler and the linker would silently drop the -X override.
 var version = "dev"
 
 func main() {

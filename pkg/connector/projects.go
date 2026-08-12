@@ -64,10 +64,6 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list projects: %w", err)
 	}
 
-	if len(projects.Items) == 0 {
-		return nil, &resourceSdk.SyncOpResults{}, nil
-	}
-
 	rv := []*v2.Resource{}
 	for _, project := range projects.Items {
 		resource, err := newProjectResource(project, parentResourceID)
@@ -85,20 +81,24 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
-// Entitlements always returns an empty slice for projects.
+
 func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+func (o *projectBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/project-team-access#project-team-access-levels
 	rv := make([]*v2.Entitlement, 0, len(permissions))
 	for _, permission := range permissions {
 		rv = append(rv, entitlement.NewAssignmentEntitlement(
-			resource,
+			nil,
 			permission,
 			entitlement.WithGrantableTo(userResourceType),
 			entitlement.WithDescription(fmt.Sprintf("Project access level %s", permission)),
 			entitlement.WithDisplayName(fmt.Sprintf("Project access level %s", permission)),
 		))
 	}
-	return rv, &resourceSdk.SyncOpResults{}, nil
+	return rv, nil, nil
 }
 
 // Grants always returns an empty slice for projects since they don't have any entitlements.
