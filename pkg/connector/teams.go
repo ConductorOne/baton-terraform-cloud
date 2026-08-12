@@ -100,10 +100,17 @@ func (o *teamBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOp
 }
 
 func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	users, err := o.client.TeamMembers.List(ctx, resource.Id.Resource)
+	teams, err := o.client.Teams.List(ctx, resource.ParentResourceId.Resource, &tfe.TeamListOptions{
+		Names:   []string{resource.DisplayName},
+		Include: []tfe.TeamIncludeOpt{"users"},
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get team members: %w", err)
 	}
+	if len(teams.Items) == 0 {
+		return nil, nil, nil
+	}
+	users := teams.Items[0].Users
 
 	rv := []*v2.Grant{}
 	for _, user := range users {
