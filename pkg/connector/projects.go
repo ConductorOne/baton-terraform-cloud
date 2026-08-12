@@ -44,7 +44,7 @@ func newProjectResource(project *tfe.Project, parentID *v2.ResourceId) (*v2.Reso
 
 func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	var page int

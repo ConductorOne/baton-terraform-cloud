@@ -7,21 +7,14 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-	"github.com/conductorone/baton-sdk/pkg/session"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
-	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
-	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/hashicorp/go-tfe"
-	"go.uber.org/zap"
 )
 
-const (
-	workspaceMembership     = "member"
-	workspaceProjectKeyBase = "workspace-project"
-)
+const workspaceMembership = "member"
 
 var _ connectorbuilder.ResourceSyncerV2 = (*workspaceBuilder)(nil)
 
@@ -33,74 +26,14 @@ func (o *workspaceBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 	return workspaceResourceType
 }
 
-// workspaceProjectKey returns the session store key for a workspace's cached project.
-// Caching goes through the session store (rather than an in-process map) because a
-// container/Lambda deployment may run List and Grants for the same sync in separate
-// invocations that don't share memory.
-func workspaceProjectKey(workspaceID string) string {
-	return fmt.Sprintf("%s/%s", workspaceProjectKeyBase, workspaceID)
-}
-
-// cachedProject holds only the *tfe.Project fields the connector actually reads
-// (see newProjectResource). tfe.Project embeds a jsonapi.NullableAttr field that
-// encoding/json cannot marshal, so the full struct can't go through the session
-// store — hence this projection instead of caching *tfe.Project directly.
-// Workspaces.List/ReadWithOptions request Include: WSProject so these fields
-// are populated (not just the JSON:API relationship linkage's ID).
-type cachedProject struct {
-	ID          string
-	Name        string
-	Description string
-	IsUnified   bool
-}
-
-// cacheWorkspacesProject is a best-effort write: a session-store failure should
-// not fail the whole List page, since getWorkspaceProject has a working API
-// fallback for a cache miss.
-func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaces *tfe.WorkspaceList) {
-	if opts.Session == nil {
-		return
-	}
-
-	items := make(map[string]cachedProject)
-	for _, workspace := range workspaces.Items {
-		if workspace.Project == nil {
-			continue
-		}
-		items[workspaceProjectKey(workspace.ID)] = cachedProject{
-			ID:          workspace.Project.ID,
-			Name:        workspace.Project.Name,
-			Description: workspace.Project.Description,
-			IsUnified:   workspace.Project.IsUnified,
-		}
-	}
-	if len(items) == 0 {
-		return
-	}
-
-	if err := session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID)); err != nil {
-		ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to cache workspace projects", zap.Error(err))
-	}
-}
-
 // getWorkspaceProject may return (nil, nil) for a workspace that has no
 // project — callers must guard against a nil project before dereferencing it.
-func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaceID, parentID string) (*tfe.Project, error) {
-	if opts.Session != nil {
-		cached, found, err := session.GetJSON[cachedProject](ctx, opts.Session, workspaceProjectKey(workspaceID), sessions.WithSyncID(opts.SyncID))
-		if err != nil {
-			ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to read cached workspace project, falling back to API", zap.Error(err))
-		} else if found {
-			return &tfe.Project{
-				ID:          cached.ID,
-				Name:        cached.Name,
-				Description: cached.Description,
-				IsUnified:   cached.IsUnified,
-			}, nil
-		}
-	}
-
-	workspace, err := o.client.Workspaces.ReadWithOptions(ctx, parentID, workspaceID, &tfe.WorkspaceReadOptions{
+//
+// Uses ReadByIDWithOptions, not ReadWithOptions: resource.Id.Resource is the
+// workspace's ID (e.g. "ws-..."), and ReadWithOptions' third argument is the
+// workspace's *name*, not its ID — passing the ID there 404s.
+func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, workspaceID string) (*tfe.Project, error) {
+	workspace, err := o.client.Workspaces.ReadByIDWithOptions(ctx, workspaceID, &tfe.WorkspaceReadOptions{
 		Include: []tfe.WSIncludeOpt{tfe.WSProject},
 	})
 	if err != nil {
@@ -150,7 +83,6 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 
 	workspaces, err := o.client.Workspaces.List(ctx, parentResourceID.Resource, &tfe.WorkspaceListOptions{
 		ListOptions: client.ListOptions(page),
-		Include:     []tfe.WSIncludeOpt{tfe.WSProject},
 	})
 
 	if err != nil {
@@ -160,9 +92,6 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 	if len(workspaces.Items) == 0 {
 		return nil, nil, nil
 	}
-
-	// Cache the projects for the workspaces
-	o.cacheWorkspacesProject(ctx, opts, workspaces)
 
 	rv := []*v2.Resource{}
 	for _, workspace := range workspaces.Items {
@@ -198,13 +127,13 @@ func (o *workspaceBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.S
 }
 
 func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	project, err := o.getWorkspaceProject(ctx, opts, resource.Id.Resource, resource.ParentResourceId.Resource)
+	project, err := o.getWorkspaceProject(ctx, resource.Id.Resource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get workspace project: %w", err)
 	}
 	if project == nil {
 		// Workspaces aren't required to belong to a project.
-		return nil, &resourceSdk.SyncOpResults{}, nil
+		return nil, nil, nil
 	}
 
 	pr, err := newProjectResource(project, resource.ParentResourceId)
@@ -236,7 +165,7 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, op
 		),
 	}
 
-	return rv, &resourceSdk.SyncOpResults{}, nil
+	return rv, nil, nil
 }
 
 func newWorkspaceBuilder(client *client.Client) *workspaceBuilder {
