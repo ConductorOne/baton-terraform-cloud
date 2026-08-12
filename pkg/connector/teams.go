@@ -111,10 +111,19 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts re
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get team members: %w", err)
 	}
-	if len(teams.Items) == 0 {
-		return nil, nil, nil
+
+	// Match by ID
+	var team *tfe.Team
+	for _, t := range teams.Items {
+		if t.ID == resource.Id.Resource {
+			team = t
+			break
+		}
 	}
-	users := teams.Items[0].Users
+	if team == nil {
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: team %s not found in organization %s", resource.Id.Resource, resource.ParentResourceId.Resource)
+	}
+	users := team.Users
 
 	rv := []*v2.Grant{}
 	for _, user := range users {

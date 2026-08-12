@@ -89,10 +89,6 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list workspaces: %w", err)
 	}
 
-	if len(workspaces.Items) == 0 {
-		return nil, nil, nil
-	}
-
 	rv := []*v2.Resource{}
 	for _, workspace := range workspaces.Items {
 		resource, err := newWorkspaceResource(workspace, parentResourceID)

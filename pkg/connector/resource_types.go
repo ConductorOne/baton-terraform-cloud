@@ -15,6 +15,7 @@ var userResourceType = &v2.ResourceType{
 	Id:          userResourceTypeID,
 	DisplayName: "User",
 	Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_USER},
+	Annotations: annotations.New(&v2.SkipEntitlementsAndGrants{}),
 }
 
 var organizationResourceType = &v2.ResourceType{
