@@ -39,17 +39,32 @@ func workspaceProjectKey(workspaceID string) string {
 	return fmt.Sprintf("%s/%s", workspaceProjectKeyBase, workspaceID)
 }
 
+// cachedProject holds only the *tfe.Project fields the connector actually reads
+// (see newProjectResource). tfe.Project embeds jsonapi.NullableAttr fields that
+// encoding/json cannot marshal, so the full struct can't go through the session store.
+type cachedProject struct {
+	ID          string
+	Name        string
+	Description string
+	IsUnified   bool
+}
+
 func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaces *tfe.WorkspaceList) error {
 	if opts.Session == nil {
 		return nil
 	}
 
-	items := make(map[string]*tfe.Project)
+	items := make(map[string]cachedProject)
 	for _, workspace := range workspaces.Items {
 		if workspace.Project == nil {
 			continue
 		}
-		items[workspaceProjectKey(workspace.ID)] = workspace.Project
+		items[workspaceProjectKey(workspace.ID)] = cachedProject{
+			ID:          workspace.Project.ID,
+			Name:        workspace.Project.Name,
+			Description: workspace.Project.Description,
+			IsUnified:   workspace.Project.IsUnified,
+		}
 	}
 	if len(items) == 0 {
 		return nil
@@ -60,12 +75,17 @@ func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts reso
 
 func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaceID, parentID string) (*tfe.Project, error) {
 	if opts.Session != nil {
-		project, found, err := session.GetJSON[*tfe.Project](ctx, opts.Session, workspaceProjectKey(workspaceID), sessions.WithSyncID(opts.SyncID))
+		cached, found, err := session.GetJSON[cachedProject](ctx, opts.Session, workspaceProjectKey(workspaceID), sessions.WithSyncID(opts.SyncID))
 		if err != nil {
 			return nil, fmt.Errorf("baton-terraform-cloud: failed to read cached workspace project: %w", err)
 		}
 		if found {
-			return project, nil
+			return &tfe.Project{
+				ID:          cached.ID,
+				Name:        cached.Name,
+				Description: cached.Description,
+				IsUnified:   cached.IsUnified,
+			}, nil
 		}
 	}
 
