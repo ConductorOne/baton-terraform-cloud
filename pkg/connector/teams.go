@@ -100,30 +100,12 @@ func (o *teamBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOp
 }
 
 func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
-	if resource.ParentResourceId == nil {
-		return nil, nil, nil
-	}
-
-	teams, err := o.client.Teams.List(ctx, resource.ParentResourceId.Resource, &tfe.TeamListOptions{
-		Names:   []string{resource.DisplayName},
-		Include: []tfe.TeamIncludeOpt{"users"},
-	})
+	// TeamMembers.List returns fully hydrated users (it requests include=users
+	// internally), unlike Teams.Read, which would return bare JSON:API linkage.
+	users, err := o.client.TeamMembers.List(ctx, resource.Id.Resource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get team members: %w", err)
 	}
-
-	// Match by ID
-	var team *tfe.Team
-	for _, t := range teams.Items {
-		if t.ID == resource.Id.Resource {
-			team = t
-			break
-		}
-	}
-	if team == nil {
-		return nil, nil, fmt.Errorf("baton-terraform-cloud: team %s not found in organization %s", resource.Id.Resource, resource.ParentResourceId.Resource)
-	}
-	users := team.Users
 
 	rv := []*v2.Grant{}
 	for _, user := range users {
