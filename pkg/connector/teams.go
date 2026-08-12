@@ -100,6 +100,10 @@ func (o *teamBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOp
 }
 
 func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
+	if resource.ParentResourceId == nil {
+		return nil, nil, nil
+	}
+
 	teams, err := o.client.Teams.List(ctx, resource.ParentResourceId.Resource, &tfe.TeamListOptions{
 		Names:   []string{resource.DisplayName},
 		Include: []tfe.TeamIncludeOpt{"users"},
