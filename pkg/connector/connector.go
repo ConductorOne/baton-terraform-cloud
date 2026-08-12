@@ -82,12 +82,6 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 	return nil, nil
 }
 
-// NewForCapabilities returns a connector instance without a client, suitable
-// only for capabilities/metadata introspection (no upstream calls are made).
-func NewForCapabilities() *Connector {
-	return &Connector{}
-}
-
 // New returns a new instance of the connector.
 func New(ctx context.Context, token, address string) (*Connector, error) {
 	client, err := client.New(token, address)
