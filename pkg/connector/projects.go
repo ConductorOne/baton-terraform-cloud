@@ -81,7 +81,6 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
-
 func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return nil, nil, nil
 }
@@ -101,7 +100,7 @@ func (o *projectBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.Syn
 	return rv, nil, nil
 }
 
-// Grants always returns an empty slice for projects since they don't have any entitlements.
+// Grants returns a grant per team with access to the project, at that team's access level.
 func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
 	var page int
 	var err error
