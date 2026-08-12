@@ -7,7 +7,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -16,6 +16,8 @@ import (
 )
 
 const orgMembership = "member"
+
+var _ connectorbuilder.ResourceSyncerV2 = (*organizationsBuilder)(nil)
 
 type organizationsBuilder struct {
 	client *client.Client
@@ -49,13 +51,13 @@ func newOrganizationResource(org *tfe.Organization) (*v2.Resource, error) {
 
 // List returns all the users from the database as resource objects.
 // Users include a UserTrait because they are the 'shape' of a standard user.
-func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -64,18 +66,18 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list organizations: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list organizations: %w", err)
 	}
 
 	if len(orgs.Items) == 0 {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := make([]*v2.Resource, 0, len(orgs.Items))
 	for _, org := range orgs.Items {
 		resource, err := newOrganizationResource(org)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create organization resource: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create organization resource: %w", err)
 		}
 		rv = append(rv, resource)
 	}
@@ -85,10 +87,10 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 		nextPage = strconv.Itoa(page + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
-func (o *organizationsBuilder) Entitlements(ctx context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *organizationsBuilder) Entitlements(ctx context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
 			resource,
@@ -97,16 +99,16 @@ func (o *organizationsBuilder) Entitlements(ctx context.Context, resource *v2.Re
 			entitlement.WithDescription(fmt.Sprintf("Member of %s team", resource.DisplayName)),
 			entitlement.WithDisplayName(fmt.Sprintf("Member of %s team", resource.DisplayName)),
 		),
-	}, "", nil, nil
+	}, &resourceSdk.SyncOpResults{}, nil
 }
 
-func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -117,18 +119,18 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
 	}
 
 	if len(memberships.Items) == 0 {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := []*v2.Grant{}
 	for _, membership := range memberships.Items {
 		principalID, err := resourceSdk.NewResourceID(userResourceType, membership.User.ID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create user resource ID: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create user resource ID: %w", err)
 		}
 		rv = append(rv, grant.NewGrant(
 			resource,
@@ -142,7 +144,7 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 		nextPage = strconv.Itoa(page + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 func (o *organizationsBuilder) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {

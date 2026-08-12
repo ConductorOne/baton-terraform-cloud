@@ -4,41 +4,60 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/session"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
 	"github.com/hashicorp/go-tfe"
 )
 
-const teamMembership = "member"
+const (
+	teamMembership     = "member"
+	teamMembersKeyBase = "team-members"
+)
+
+var _ connectorbuilder.ResourceSyncerV2 = (*teamBuilder)(nil)
 
 type teamBuilder struct {
-	client      *client.Client
-	m           *sync.Mutex
-	teamMembers map[string][]*tfe.User
+	client *client.Client
 }
 
-func (o *teamBuilder) cacheTeamMembers(teams *tfe.TeamList) {
-	o.m.Lock()
-	defer o.m.Unlock()
-	for _, team := range teams.Items {
-		o.teamMembers[team.ID] = team.Users
+// teamMembersKey returns the session store key for the cached member list of a team.
+// Caching goes through the session store (rather than an in-process map) because a
+// container/Lambda deployment may run List and Grants for the same sync in separate
+// invocations that don't share memory.
+func teamMembersKey(teamID string) string {
+	return fmt.Sprintf("%s/%s", teamMembersKeyBase, teamID)
+}
+
+func (o *teamBuilder) cacheTeamMembers(ctx context.Context, opts resourceSdk.SyncOpAttrs, teams *tfe.TeamList) error {
+	if opts.Session == nil {
+		return nil
 	}
+
+	items := make(map[string][]*tfe.User, len(teams.Items))
+	for _, team := range teams.Items {
+		items[teamMembersKey(team.ID)] = team.Users
+	}
+
+	return session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID))
 }
 
-func (o *teamBuilder) getTeamMembers(ctx context.Context, teamID string) ([]*tfe.User, error) {
-	o.m.Lock()
-	defer o.m.Unlock()
-
-	users, ok := o.teamMembers[teamID]
-	if ok {
-		return users, nil
+func (o *teamBuilder) getTeamMembers(ctx context.Context, opts resourceSdk.SyncOpAttrs, teamID string) ([]*tfe.User, error) {
+	if opts.Session != nil {
+		users, found, err := session.GetJSON[[]*tfe.User](ctx, opts.Session, teamMembersKey(teamID), sessions.WithSyncID(opts.SyncID))
+		if err != nil {
+			return nil, fmt.Errorf("baton-terraform-cloud: failed to read cached team members: %w", err)
+		}
+		if found {
+			return users, nil
+		}
 	}
 
 	team, err := o.client.Teams.Read(ctx, teamID)
@@ -70,17 +89,17 @@ func newTeamResource(team *tfe.Team, parentID *v2.ResourceId) (*v2.Resource, err
 	)
 }
 
-func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -92,20 +111,22 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list teams: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list teams: %w", err)
 	}
 
 	if len(teams.Items) == 0 {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
-	o.cacheTeamMembers(teams)
+	if err := o.cacheTeamMembers(ctx, opts, teams); err != nil {
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to cache team members: %w", err)
+	}
 
 	rv := []*v2.Resource{}
 	for _, team := range teams.Items {
 		resource, err := newTeamResource(team, parentResourceID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create team resource: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create team resource: %w", err)
 		}
 		rv = append(rv, resource)
 	}
@@ -115,10 +136,10 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		nextPage = strconv.Itoa(page + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
-func (o *teamBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *teamBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
 			resource,
@@ -127,13 +148,13 @@ func (o *teamBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *
 			entitlement.WithDescription(fmt.Sprintf("Member of %s team", resource.DisplayName)),
 			entitlement.WithDisplayName(fmt.Sprintf("Member of %s team", resource.DisplayName)),
 		),
-	}, "", nil, nil
+	}, &resourceSdk.SyncOpResults{}, nil
 }
 
-func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	users, err := o.getTeamMembers(ctx, resource.Id.Resource)
+func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
+	users, err := o.getTeamMembers(ctx, opts, resource.Id.Resource)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to get team members: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get team members: %w", err)
 	}
 
 	rv := []*v2.Grant{}
@@ -144,7 +165,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 		}
 		principalID, err := resourceSdk.NewResourceID(userResourceType, user.ID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for user %v: %w", user.ID, err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for user %v: %w", user.ID, err)
 		}
 
 		rv = append(rv, grant.NewGrant(
@@ -154,7 +175,7 @@ func (o *teamBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken 
 		))
 	}
 
-	return rv, "", nil, nil
+	return rv, &resourceSdk.SyncOpResults{}, nil
 }
 
 func (o *teamBuilder) isTeamMember(ctx context.Context, teamID, userID string) (bool, error) {
@@ -216,8 +237,6 @@ func (o *teamBuilder) Revoke(ctx context.Context, grant *v2.Grant) (annotations.
 
 func newTeamBuilder(client *client.Client) *teamBuilder {
 	return &teamBuilder{
-		client:      client,
-		m:           &sync.Mutex{},
-		teamMembers: make(map[string][]*tfe.User),
+		client: client,
 	}
 }

@@ -6,14 +6,15 @@ import (
 	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
-	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
 	"github.com/hashicorp/go-tfe"
 )
+
+var _ connectorbuilder.ResourceSyncerV2 = (*projectBuilder)(nil)
 
 type projectBuilder struct {
 	client *client.Client
@@ -41,17 +42,17 @@ func newProjectResource(project *tfe.Project, parentID *v2.ResourceId) (*v2.Reso
 	)
 }
 
-func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -60,18 +61,18 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list projects: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list projects: %w", err)
 	}
 
 	if len(projects.Items) == 0 {
-		return nil, "", nil, nil
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	rv := []*v2.Resource{}
 	for _, project := range projects.Items {
 		resource, err := newProjectResource(project, parentResourceID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create project resource: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create project resource: %w", err)
 		}
 		rv = append(rv, resource)
 	}
@@ -81,11 +82,11 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 		nextPage = strconv.Itoa(page + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 // Entitlements always returns an empty slice for projects.
-func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	// https://developer.hashicorp.com/terraform/cloud-docs/api-docs/project-team-access#project-team-access-levels
 	rv := make([]*v2.Entitlement, 0, len(permissions))
 	for _, permission := range permissions {
@@ -97,17 +98,17 @@ func (o *projectBuilder) Entitlements(_ context.Context, resource *v2.Resource, 
 			entitlement.WithDisplayName(fmt.Sprintf("Project access level %s", permission)),
 		))
 	}
-	return rv, "", nil, nil
+	return rv, &resourceSdk.SyncOpResults{}, nil
 }
 
 // Grants always returns an empty slice for projects since they don't have any entitlements.
-func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -116,14 +117,14 @@ func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, pTok
 		ListOptions: client.ListOptions(page),
 	})
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list project team access: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list project team access: %w", err)
 	}
 
 	rv := []*v2.Grant{}
 	for _, item := range res.Items {
 		tr, err := newTeamResource(item.Team, resource.ParentResourceId)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		grantOptions := []grant.GrantOption{
@@ -136,7 +137,7 @@ func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, pTok
 
 		teamResourceId, err := resourceSdk.NewResourceID(teamResourceType, item.Team.ID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for team %v: %w", item.Team.ID, err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for team %v: %w", item.Team.ID, err)
 		}
 		rv = append(rv, grant.NewGrant(
 			resource,
@@ -151,7 +152,7 @@ func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, pTok
 		nextPage = strconv.Itoa(page + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 func newProjectBuilder(client *client.Client) *projectBuilder {
