@@ -24,7 +24,7 @@ var (
 
 var Config = field.NewConfiguration(
 	ConfigurationFields,
-	field.WithConnectorDisplayName("Terraform Cloud"),
+	field.WithConnectorDisplayName("HCP Terraform"),
 	field.WithHelpUrl("/docs/baton/terraform-cloud"),
 	field.WithIconUrl("/static/app-icons/terraform-cloud.svg"),
 )

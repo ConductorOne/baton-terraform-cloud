@@ -13,7 +13,9 @@ import (
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/hashicorp/go-tfe"
+	"go.uber.org/zap"
 )
 
 const (
@@ -49,9 +51,12 @@ type cachedProject struct {
 	IsUnified   bool
 }
 
-func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaces *tfe.WorkspaceList) error {
+// cacheWorkspacesProject is a best-effort write: a session-store failure should
+// not fail the whole List page, since getWorkspaceProject has a working API
+// fallback for a cache miss.
+func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaces *tfe.WorkspaceList) {
 	if opts.Session == nil {
-		return nil
+		return
 	}
 
 	items := make(map[string]cachedProject)
@@ -67,19 +72,22 @@ func (o *workspaceBuilder) cacheWorkspacesProject(ctx context.Context, opts reso
 		}
 	}
 	if len(items) == 0 {
-		return nil
+		return
 	}
 
-	return session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID))
+	if err := session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID)); err != nil {
+		ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to cache workspace projects", zap.Error(err))
+	}
 }
 
+// getWorkspaceProject may return (nil, nil) for a workspace that has no
+// project — callers must guard against a nil project before dereferencing it.
 func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, opts resourceSdk.SyncOpAttrs, workspaceID, parentID string) (*tfe.Project, error) {
 	if opts.Session != nil {
 		cached, found, err := session.GetJSON[cachedProject](ctx, opts.Session, workspaceProjectKey(workspaceID), sessions.WithSyncID(opts.SyncID))
 		if err != nil {
-			return nil, fmt.Errorf("baton-terraform-cloud: failed to read cached workspace project: %w", err)
-		}
-		if found {
+			ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to read cached workspace project, falling back to API", zap.Error(err))
+		} else if found {
 			return &tfe.Project{
 				ID:          cached.ID,
 				Name:        cached.Name,
@@ -148,9 +156,7 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 	}
 
 	// Cache the projects for the workspaces
-	if err := o.cacheWorkspacesProject(ctx, opts, workspaces); err != nil {
-		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to cache workspace projects: %w", err)
-	}
+	o.cacheWorkspacesProject(ctx, opts, workspaces)
 
 	rv := []*v2.Resource{}
 	for _, workspace := range workspaces.Items {
@@ -185,6 +191,10 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, op
 	project, err := o.getWorkspaceProject(ctx, opts, resource.Id.Resource, resource.ParentResourceId.Resource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get workspace project: %w", err)
+	}
+	if project == nil {
+		// Workspaces aren't required to belong to a project.
+		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
 	pr, err := newProjectResource(project, resource.ParentResourceId)

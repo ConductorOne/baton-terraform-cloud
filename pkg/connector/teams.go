@@ -14,7 +14,9 @@ import (
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/hashicorp/go-tfe"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,9 +38,12 @@ func teamMembersKey(teamID string) string {
 	return fmt.Sprintf("%s/%s", teamMembersKeyBase, teamID)
 }
 
-func (o *teamBuilder) cacheTeamMembers(ctx context.Context, opts resourceSdk.SyncOpAttrs, teams *tfe.TeamList) error {
+// cacheTeamMembers is a best-effort write: a session-store failure (e.g. a
+// team exceeding the store's size limit) should not fail the whole List page,
+// since getTeamMembers has a working API fallback for a cache miss.
+func (o *teamBuilder) cacheTeamMembers(ctx context.Context, opts resourceSdk.SyncOpAttrs, teams *tfe.TeamList) {
 	if opts.Session == nil {
-		return nil
+		return
 	}
 
 	items := make(map[string][]*tfe.User, len(teams.Items))
@@ -46,26 +51,26 @@ func (o *teamBuilder) cacheTeamMembers(ctx context.Context, opts resourceSdk.Syn
 		items[teamMembersKey(team.ID)] = team.Users
 	}
 
-	return session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID))
+	if err := session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID)); err != nil {
+		ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to cache team members", zap.Error(err))
+	}
 }
 
 func (o *teamBuilder) getTeamMembers(ctx context.Context, opts resourceSdk.SyncOpAttrs, teamID string) ([]*tfe.User, error) {
 	if opts.Session != nil {
 		users, found, err := session.GetJSON[[]*tfe.User](ctx, opts.Session, teamMembersKey(teamID), sessions.WithSyncID(opts.SyncID))
 		if err != nil {
-			return nil, fmt.Errorf("baton-terraform-cloud: failed to read cached team members: %w", err)
-		}
-		if found {
+			ctxzap.Extract(ctx).Debug("baton-terraform-cloud: failed to read cached team members, falling back to API", zap.Error(err))
+		} else if found {
 			return users, nil
 		}
 	}
 
-	team, err := o.client.Teams.Read(ctx, teamID)
-	if err != nil {
-		return nil, err
-	}
-
-	return team.Users, nil
+	// Use TeamMembers.List (not Teams.Read) so a cache miss returns fully
+	// hydrated users, matching the cached path — Teams.Read without an
+	// "include" returns bare JSON:API linkage (ID only), which would make
+	// IsServiceAccount always false and let service accounts leak into grants.
+	return o.client.TeamMembers.List(ctx, teamID)
 }
 
 func (o *teamBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -118,9 +123,7 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 		return nil, &resourceSdk.SyncOpResults{}, nil
 	}
 
-	if err := o.cacheTeamMembers(ctx, opts, teams); err != nil {
-		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to cache team members: %w", err)
-	}
+	o.cacheTeamMembers(ctx, opts, teams)
 
 	rv := []*v2.Resource{}
 	for _, team := range teams.Items {
