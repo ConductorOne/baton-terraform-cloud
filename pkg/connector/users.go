@@ -96,7 +96,7 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	var nextPage string
 	if memberships.CurrentPage < memberships.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(memberships.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil

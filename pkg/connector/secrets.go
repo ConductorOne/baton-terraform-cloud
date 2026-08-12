@@ -81,7 +81,7 @@ func (o *agentTokenBuilder) List(ctx context.Context, parentResourceID *v2.Resou
 
 	var nextPage string
 	if agentPools.CurrentPage < agentPools.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(agentPools.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil

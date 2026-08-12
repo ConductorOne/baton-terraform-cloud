@@ -48,7 +48,16 @@ func (o *teamBuilder) cacheTeamMembers(ctx context.Context, opts resourceSdk.Syn
 
 	items := make(map[string][]*tfe.User, len(teams.Items))
 	for _, team := range teams.Items {
+		// Skip unhydrated teams: caching an empty/nil list here would make a
+		// later GetJSON report found=true, so getTeamMembers would return no
+		// members instead of falling back to TeamMembers.List.
+		if len(team.Users) == 0 {
+			continue
+		}
 		items[teamMembersKey(team.ID)] = team.Users
+	}
+	if len(items) == 0 {
+		return
 	}
 
 	if err := session.SetManyJSON(ctx, opts.Session, items, sessions.WithSyncID(opts.SyncID)); err != nil {
@@ -136,7 +145,7 @@ func (o *teamBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 
 	var nextPage string
 	if teams.CurrentPage < teams.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(teams.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil

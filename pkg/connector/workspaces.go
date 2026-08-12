@@ -42,8 +42,11 @@ func workspaceProjectKey(workspaceID string) string {
 }
 
 // cachedProject holds only the *tfe.Project fields the connector actually reads
-// (see newProjectResource). tfe.Project embeds jsonapi.NullableAttr fields that
-// encoding/json cannot marshal, so the full struct can't go through the session store.
+// (see newProjectResource). tfe.Project embeds a jsonapi.NullableAttr field that
+// encoding/json cannot marshal, so the full struct can't go through the session
+// store — hence this projection instead of caching *tfe.Project directly.
+// Workspaces.List/ReadWithOptions request Include: WSProject so these fields
+// are populated (not just the JSON:API relationship linkage's ID).
 type cachedProject struct {
 	ID          string
 	Name        string
@@ -97,7 +100,9 @@ func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, opts resourc
 		}
 	}
 
-	workspace, err := o.client.Workspaces.Read(ctx, parentID, workspaceID)
+	workspace, err := o.client.Workspaces.ReadWithOptions(ctx, parentID, workspaceID, &tfe.WorkspaceReadOptions{
+		Include: []tfe.WSIncludeOpt{tfe.WSProject},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +150,7 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 
 	workspaces, err := o.client.Workspaces.List(ctx, parentResourceID.Resource, &tfe.WorkspaceListOptions{
 		ListOptions: client.ListOptions(page),
+		Include:     []tfe.WSIncludeOpt{tfe.WSProject},
 	})
 
 	if err != nil {
@@ -169,7 +175,7 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 
 	var nextPage string
 	if workspaces.CurrentPage < workspaces.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(workspaces.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil

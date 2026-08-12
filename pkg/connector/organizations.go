@@ -84,7 +84,7 @@ func (o *organizationsBuilder) List(ctx context.Context, parentResourceID *v2.Re
 
 	var nextPage string
 	if orgs.CurrentPage < orgs.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(orgs.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
@@ -141,7 +141,7 @@ func (o *organizationsBuilder) Grants(ctx context.Context, resource *v2.Resource
 
 	var nextPage string
 	if memberships.CurrentPage < memberships.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(memberships.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil

@@ -79,7 +79,7 @@ func (o *projectBuilder) List(ctx context.Context, parentResourceID *v2.Resource
 
 	var nextPage string
 	if projects.CurrentPage < projects.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(projects.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
@@ -149,7 +149,7 @@ func (o *projectBuilder) Grants(ctx context.Context, resource *v2.Resource, opts
 
 	var nextPage string
 	if res.CurrentPage < res.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(res.CurrentPage + 1)
 	}
 
 	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
