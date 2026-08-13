@@ -94,7 +94,8 @@
     },
     {
       "name": "token",
-      "description": "The API token used to authenticate with terraform cloud.",
+      "displayName": "API Token",
+      "description": "The API token used to authenticate with Terraform Cloud.",
       "isRequired": true,
       "isSecret": true,
       "stringField": {
@@ -105,11 +106,15 @@
     },
     {
       "name": "address",
-      "description": "The address of the terraform instance. Default: https://app.terraform.io",
+      "displayName": "Address",
+      "description": "The address of the Terraform instance. Default: https://app.terraform.io",
       "stringField": {
         "defaultValue": "https://app.terraform.io",
         "rules": {}
       }
     }
-  ]
+  ],
+  "displayName": "HCP Terraform",
+  "helpUrl": "/docs/baton/terraform-cloud",
+  "iconUrl": "/static/app-icons/terraform-cloud.svg"
 }

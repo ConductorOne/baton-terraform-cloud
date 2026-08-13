@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
-	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -18,38 +16,26 @@ import (
 
 const workspaceMembership = "member"
 
+var _ connectorbuilder.ResourceSyncerV2 = (*workspaceBuilder)(nil)
+
 type workspaceBuilder struct {
-	client           *client.Client
-	m                *sync.Mutex
-	workspaceProject map[string]*tfe.Project
+	client *client.Client
 }
 
 func (o *workspaceBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 	return workspaceResourceType
 }
 
-func (o *workspaceBuilder) cacheWorkspacesProject(workspaces *tfe.WorkspaceList) {
-	o.m.Lock()
-	defer o.m.Unlock()
-
-	for _, workspace := range workspaces.Items {
-		if workspace.Project == nil {
-			continue
-		}
-		o.workspaceProject[workspace.ID] = workspace.Project
-	}
-}
-
-func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, workspaceID, parentID string) (*tfe.Project, error) {
-	o.m.Lock()
-	defer o.m.Unlock()
-
-	project, ok := o.workspaceProject[workspaceID]
-	if ok {
-		return project, nil
-	}
-
-	workspace, err := o.client.Workspaces.Read(ctx, parentID, workspaceID)
+// getWorkspaceProject may return (nil, nil) for a workspace that has no
+// project — callers must guard against a nil project before dereferencing it.
+//
+// Uses ReadByIDWithOptions, not ReadWithOptions: resource.Id.Resource is the
+// workspace's ID (e.g. "ws-..."), and ReadWithOptions' third argument is the
+// workspace's *name*, not its ID — passing the ID there 404s.
+func (o *workspaceBuilder) getWorkspaceProject(ctx context.Context, workspaceID string) (*tfe.Project, error) {
+	workspace, err := o.client.Workspaces.ReadByIDWithOptions(ctx, workspaceID, &tfe.WorkspaceReadOptions{
+		Include: []tfe.WSIncludeOpt{tfe.WSProject},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -71,27 +57,36 @@ func newWorkspaceResource(workspace *tfe.Workspace, parentID *v2.ResourceId) (*v
 		"executionMode":    workspace.ExecutionMode,
 	}
 
+	resourceOpts := []resourceSdk.ResourceOption{
+		resourceSdk.WithResourceProfile(profile),
+		resourceSdk.WithParentResourceID(parentID),
+	}
+	if workspace.Project == nil {
+		// Workspaces aren't required to belong to a project, and Grants has nothing
+		// to grant against without one, so skip the sync call entirely.
+		resourceOpts = append(resourceOpts, resourceSdk.WithAnnotation(&v2.SkipGrants{}))
+	}
+
 	return resourceSdk.NewGroupResource(
 		workspace.Name,
 		workspaceResourceType,
 		workspace.ID,
 		nil,
-		resourceSdk.WithResourceProfile(profile),
-		resourceSdk.WithParentResourceID(parentID),
+		resourceOpts...,
 	)
 }
 
-func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, "", nil, nil
+		return nil, nil, nil
 	}
 
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -100,54 +95,55 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list workspaces: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list workspaces: %w", err)
 	}
-
-	if len(workspaces.Items) == 0 {
-		return nil, "", nil, nil
-	}
-
-	// Cache the projects for the workspaces
-	o.cacheWorkspacesProject(workspaces)
 
 	rv := []*v2.Resource{}
 	for _, workspace := range workspaces.Items {
 		resource, err := newWorkspaceResource(workspace, parentResourceID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create workspace resource: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create workspace resource: %w", err)
 		}
 		rv = append(rv, resource)
 	}
 
 	var nextPage string
 	if workspaces.CurrentPage < workspaces.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(workspaces.CurrentPage + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
-func (o *workspaceBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *workspaceBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+func (o *workspaceBuilder) StaticEntitlements(_ context.Context, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
 	return []*v2.Entitlement{
 		entitlement.NewAssignmentEntitlement(
-			resource,
+			nil,
 			teamMembership,
 			entitlement.WithGrantableTo(userResourceType),
-			entitlement.WithDescription(fmt.Sprintf("Member of %s workspace", resource.DisplayName)),
-			entitlement.WithDisplayName(fmt.Sprintf("Member of %s workspace", resource.DisplayName)),
+			entitlement.WithDescription("Member of workspace"),
+			entitlement.WithDisplayName("Member of workspace"),
 		),
-	}, "", nil, nil
+	}, nil, nil
 }
 
-func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	project, err := o.getWorkspaceProject(ctx, resource.Id.Resource, resource.ParentResourceId.Resource)
+func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
+	project, err := o.getWorkspaceProject(ctx, resource.Id.Resource)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to get workspace project: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to get workspace project: %w", err)
+	}
+	if project == nil {
+		// Workspaces aren't required to belong to a project.
+		return nil, nil, nil
 	}
 
 	pr, err := newProjectResource(project, resource.ParentResourceId)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create project resource: %w", err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create project resource: %w", err)
 	}
 
 	entitlementIDs := []string{}
@@ -163,7 +159,7 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, pT
 
 	projectResourceId, err := resourceSdk.NewResourceID(projectResourceType, project.ID)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for project %v: %w", project.ID, err)
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create resource ID for project %v: %w", project.ID, err)
 	}
 	rv := []*v2.Grant{
 		grant.NewGrant(
@@ -174,13 +170,11 @@ func (o *workspaceBuilder) Grants(ctx context.Context, resource *v2.Resource, pT
 		),
 	}
 
-	return rv, "", nil, nil
+	return rv, nil, nil
 }
 
 func newWorkspaceBuilder(client *client.Client) *workspaceBuilder {
 	return &workspaceBuilder{
-		client:           client,
-		m:                &sync.Mutex{},
-		workspaceProject: make(map[string]*tfe.Project),
+		client: client,
 	}
 }

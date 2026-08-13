@@ -8,11 +8,12 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	resourceSdk "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-terraform-cloud/pkg/client"
 	"github.com/hashicorp/go-tfe"
 )
+
+var _ connectorbuilder.AccountManagerV2 = (*userBuilder)(nil)
 
 type userBuilder struct {
 	client *client.Client
@@ -24,7 +25,7 @@ func (o *userBuilder) ResourceType(ctx context.Context) *v2.ResourceType {
 
 func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
-		emailProfileKey:    user.Email,
+		emailProfileKey:     user.Email,
 		"twoFactorEnabled":  user.TwoFactor.Enabled,
 		"twoFactorVerified": user.TwoFactor.Verified,
 	}
@@ -56,17 +57,17 @@ func newUserResource(user *tfe.User, parentID *v2.ResourceId) (*v2.Resource, err
 
 // List returns all the users from the database as resource objects.
 // Users include a UserTrait because they are the 'shape' of a standard user.
-func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId, opts resourceSdk.SyncOpAttrs) ([]*v2.Resource, *resourceSdk.SyncOpResults, error) {
 	if parentResourceID == nil {
-		return nil, "", nil, nil
+		return nil, nil, nil
 	}
 
 	var page int
 	var err error
-	if pToken.Token != "" {
-		page, err = strconv.Atoi(pToken.Token)
+	if opts.PageToken.Token != "" {
+		page, err = strconv.Atoi(opts.PageToken.Token)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to parse page token: %w", err)
 		}
 	}
 
@@ -77,28 +78,24 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	})
 
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
-	}
-
-	if len(memberships.Items) == 0 {
-		return nil, "", nil, nil
+		return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to list users: %w", err)
 	}
 
 	rv := []*v2.Resource{}
 	for _, membership := range memberships.Items {
 		resource, err := newUserResource(membership.User, parentResourceID)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("baton-terraform-cloud: failed to create user resource: %w", err)
+			return nil, nil, fmt.Errorf("baton-terraform-cloud: failed to create user resource: %w", err)
 		}
 		rv = append(rv, resource)
 	}
 
 	var nextPage string
 	if memberships.CurrentPage < memberships.TotalPages {
-		nextPage = strconv.Itoa(page + 1)
+		nextPage = strconv.Itoa(memberships.CurrentPage + 1)
 	}
 
-	return rv, nextPage, nil, nil
+	return rv, &resourceSdk.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 func (o *userBuilder) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
@@ -156,13 +153,13 @@ func (o *userBuilder) CreateAccount(ctx context.Context, accountInfo *v2.Account
 }
 
 // Entitlements always returns an empty slice for users.
-func (o *userBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (o *userBuilder) Entitlements(_ context.Context, resource *v2.Resource, _ resourceSdk.SyncOpAttrs) ([]*v2.Entitlement, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 // Grants always returns an empty slice for users since they don't have any entitlements.
-func (o *userBuilder) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (o *userBuilder) Grants(ctx context.Context, resource *v2.Resource, opts resourceSdk.SyncOpAttrs) ([]*v2.Grant, *resourceSdk.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func newUserBuilder(client *client.Client) *userBuilder {
