@@ -57,13 +57,22 @@ func newWorkspaceResource(workspace *tfe.Workspace, parentID *v2.ResourceId) (*v
 		"executionMode":    workspace.ExecutionMode,
 	}
 
+	resourceOpts := []resourceSdk.ResourceOption{
+		resourceSdk.WithResourceProfile(profile),
+		resourceSdk.WithParentResourceID(parentID),
+	}
+	if workspace.Project == nil {
+		// Workspaces aren't required to belong to a project, and Grants has nothing
+		// to grant against without one, so skip the sync call entirely.
+		resourceOpts = append(resourceOpts, resourceSdk.WithAnnotation(&v2.SkipGrants{}))
+	}
+
 	return resourceSdk.NewGroupResource(
 		workspace.Name,
 		workspaceResourceType,
 		workspace.ID,
 		nil,
-		resourceSdk.WithResourceProfile(profile),
-		resourceSdk.WithParentResourceID(parentID),
+		resourceOpts...,
 	)
 }
 
@@ -83,6 +92,7 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 
 	workspaces, err := o.client.Workspaces.List(ctx, parentResourceID.Resource, &tfe.WorkspaceListOptions{
 		ListOptions: client.ListOptions(page),
+		Include:     []tfe.WSIncludeOpt{tfe.WSProject},
 	})
 
 	if err != nil {

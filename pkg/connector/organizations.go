@@ -96,8 +96,8 @@ func (o *organizationsBuilder) StaticEntitlements(ctx context.Context, _ resourc
 			nil,
 			teamMembership,
 			entitlement.WithGrantableTo(userResourceType),
-			entitlement.WithDescription("Member of organization team"),
-			entitlement.WithDisplayName("Member of organization team"),
+			entitlement.WithDescription("Member of organization"),
+			entitlement.WithDisplayName("Member of organization"),
 		),
 	}, nil, nil
 }
