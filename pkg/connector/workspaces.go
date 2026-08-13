@@ -92,7 +92,6 @@ func (o *workspaceBuilder) List(ctx context.Context, parentResourceID *v2.Resour
 
 	workspaces, err := o.client.Workspaces.List(ctx, parentResourceID.Resource, &tfe.WorkspaceListOptions{
 		ListOptions: client.ListOptions(page),
-		Include:     []tfe.WSIncludeOpt{tfe.WSProject},
 	})
 
 	if err != nil {
